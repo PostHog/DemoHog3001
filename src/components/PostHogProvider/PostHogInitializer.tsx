@@ -1,6 +1,7 @@
 
 import { useEffect } from 'react';
 import { PostHogProvider as OriginalPostHogProvider } from 'posthog-js/react';
+import { initLogger } from '../../utils/posthog/logger';
 
 interface PostHogInitializerProps {
   apiKey: string;
@@ -30,6 +31,7 @@ export const PostHogInitializer = ({
         autocapture: true,
         loaded: (posthogInstance: any) => {
           console.log('PostHog loaded successfully');
+          initLogger();
           onLoaded();
         }
       }}

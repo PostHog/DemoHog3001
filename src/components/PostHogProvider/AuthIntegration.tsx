@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '../../integrations/supabase/client';
 import { identifyUser, setUserType, setSubscriptionPlan, resetIdentity } from '../../utils/posthog/simple';
 import posthog from 'posthog-js';
+import { logger } from '../../utils/posthog/logger';
 
 interface AuthIntegrationProps {
   posthogLoadedRef: React.MutableRefObject<boolean>;
@@ -26,15 +27,18 @@ export const useAuthIntegration = ({
   useEffect(() => {
     if (posthogLoadedRef.current) {
       console.log('PostHog: Auth integration starting - checking current user');
+      logger.debug('auth.integration.started');
       checkAndIdentifyCurrentUser();
     }
     
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('PostHog: Auth state changed:', event);
-      
+      logger.debug('auth.state_changed', { event });
+
       if (event === 'SIGNED_IN' && session?.user && posthogLoadedRef.current) {
         console.log('PostHog: User signed in, identifying immediately');
+        logger.debug('auth.signed_in');
         const email = session.user.email;
         if (email) {
           // Reset if different user
@@ -48,6 +52,7 @@ export const useAuthIntegration = ({
         }
       } else if (event === 'SIGNED_OUT') {
         console.log('PostHog: User signed out, resetting identity');
+        logger.debug('auth.signed_out');
         resetIdentity();
         currentUserRef.current = null;
       }
@@ -106,6 +111,7 @@ export const useAuthIntegration = ({
         
         if (error) {
           console.warn('PostHog: Profile fetch error:', error);
+          logger.warn('auth.profile_fetch_error', { error: error.message });
         }
         
         // Create user properties
@@ -121,6 +127,12 @@ export const useAuthIntegration = ({
         
         // Simple identification using new utilities
         console.log('PostHog: Identifying user with properties:', userProperties);
+        logger.debug('auth.user_identified', {
+          has_profile: !error,
+          is_kids_account: userProperties.is_kids_account,
+          is_admin: userProperties.is_admin_user,
+          language: userProperties.language,
+        });
         identifyUser(email, userProperties);
         
         // Reload feature flags after identification with proper timing
@@ -129,6 +141,7 @@ export const useAuthIntegration = ({
           if (posthog && typeof posthog.reloadFeatureFlags === 'function') {
             posthog.reloadFeatureFlags();
             console.log('PostHog: Feature flags reloaded successfully');
+            logger.debug('auth.feature_flags_reloaded');
           }
         }, 100);
         
@@ -162,6 +175,7 @@ export const useAuthIntegration = ({
         
         const planName = planData.name;
         console.log(`PostHog: Setting subscription plan: ${planName}`);
+        logger.debug('auth.subscription_set', { plan_name: planName, plan_id: planId, plan_price: planData.price || '0' });
         
         setCurrentSubscriptionName(planName);
         updateSubscription(planName, planId, planData.price || '0');

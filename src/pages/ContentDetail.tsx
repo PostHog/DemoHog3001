@@ -8,6 +8,7 @@ import { useToast } from '../hooks/use-toast';
 import { useMyList } from '../utils/posthog/myList';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 import { safeCapture } from '../utils/posthog';
+import { logger } from '../utils/posthog/logger';
 import {
   Dialog,
   DialogContent,
@@ -43,14 +44,23 @@ const ContentDetail = () => {
         
         setContent(data);
         
+        // Log content view
+        logger.info('content.detail.loaded', {
+          content_id: data.id,
+          content_type: data.type,
+          content_title: data.title,
+          has_video: !!data.video_url,
+        });
+
         // Track view in PostHog
         safeCapture('content_detail_viewed', {
           contentId: data.id,
           contentTitle: data.title,
           contentType: data.type
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching content:', error);
+        logger.error('content.load_failed', { content_id: id || 'unknown', error: error?.message || 'unknown' });
         toast({
           title: 'Error',
           description: 'Failed to load content details',
@@ -88,6 +98,12 @@ const ContentDetail = () => {
       }
     }
     
+    logger.debug('content.list_updated', {
+      content_id: content.id,
+      content_title: content.title,
+      action: isCurrentlyInList ? 'remove' : 'add',
+    });
+
     safeCapture('my_list_button_clicked', {
       contentId: content.id,
       contentTitle: content.title,
@@ -118,7 +134,12 @@ const ContentDetail = () => {
     }
     
     setIsPlayingVideo(true);
-    
+
+    logger.debug('content.playback_started', {
+      content_id: content?.id,
+      content_title: content?.title,
+    });
+
     safeCapture('content_play_clicked', {
       contentId: content?.id,
       contentTitle: content?.title,

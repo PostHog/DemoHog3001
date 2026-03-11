@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../../integrations/supabase/client';
 import { safeReset } from '../../utils/posthog';
+import { logger } from '../../utils/posthog/logger';
 
 // Define types for our auth context
 export interface AuthState {
@@ -148,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleLogout = async () => {
     try {
       console.log('Starting logout process...');
-      
+
       // Step 1: Clean up all cached data first
       cleanupAllAuthData();
       
@@ -175,14 +176,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       processedSessionsRef.current.clear();
       
       console.log('Logout process completed successfully');
+      // Wide event: one log at completion
+      logger.info('auth.logout.completed', { status: 'success' });
       
       // Step 6: Force a clean page reload to ensure all state is reset
       setTimeout(() => {
         window.location.href = '/';
       }, 100);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error during logout:", error);
+      // Wide event: one log at completion with failure context
+      logger.error('auth.logout.completed', { status: 'failure', error: error?.message || 'unknown' });
       
       // Even if there's an error, try to reset the state and reload
       updateAuthState({
