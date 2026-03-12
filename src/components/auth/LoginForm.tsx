@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/use-toast';
 import { supabase } from '../../integrations/supabase/client';
 import { safeCapture, safeReloadFeatureFlags } from '../../utils/posthog';
 import { validateEmail, sanitizeInput, rateLimitCheck, auditLog } from '../../utils/inputValidation';
+import { logger } from '../../utils/posthog/logger';
 
 interface LoginFormProps {
   fetchUserProfile: (userId: string) => Promise<void>;
@@ -75,25 +76,31 @@ export const LoginForm = ({ fetchUserProfile }: LoginFormProps) => {
       const sanitizedEmail = sanitizeInput(email).toLowerCase();
       
       console.log("Attempting to login with:", sanitizedEmail);
-      
+      const loginStartTime = performance.now();
+
       // Try to sign in with email/password
       const { data, error } = await supabase.auth.signInWithPassword({
         email: sanitizedEmail,
         password
       });
-      
+
       if (error) {
         console.error("Login failed:", error);
         throw error;
       }
-      
+
       if (data && data.user) {
         console.log("Login successful:", data.user.id);
         await handleSuccessfulLogin(data.user.id, email);
+        // Wide event: one log at completion with all context
+        const duration_ms = Math.round(performance.now() - loginStartTime);
+        logger.info('auth.login.completed', { status: 'success', duration_ms, auth_method: 'email_password' });
       }
     } catch (error: any) {
       console.error("Login failed:", error);
-      
+      // Wide event: one log at completion with failure context
+      logger.error('auth.login.completed', { status: 'failure', auth_method: 'email_password', error_type: error?.message || 'unknown' });
+
       toast({
         title: "Login failed",
         description: error.message || "Invalid email or password",
@@ -106,7 +113,7 @@ export const LoginForm = ({ fetchUserProfile }: LoginFormProps) => {
   
   const handleSuccessfulLogin = async (userId: string, userEmail: string) => {
     console.log('Login success, user ID:', userId);
-    
+
     // PostHog identification is centralized in PostHogProvider
     safeCapture('user_login_success');
     

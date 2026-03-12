@@ -11,6 +11,7 @@ import { Plan } from '../components/SubscriptionPlan';
 import { safeCapture, captureEventWithGroup, captureTestEvent } from '../utils/posthog';
 import { useFeatureFlagVariantKey } from 'posthog-js/react';
 import { extractPriceValue } from '../utils/posthog/helpers';
+import { logger } from '../utils/posthog/logger';
 
 const Plans = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -62,9 +63,11 @@ const Plans = () => {
           }));
           
           setPlans(formattedPlans);
+          logger.info('plans.loaded', { plan_count: formattedPlans.length });
         }
       } catch (error: any) {
         console.error('Error fetching plans:', error);
+        logger.error('plans.load_failed', { error: error?.message || 'unknown' });
         toast({
           title: 'Error',
           description: 'Could not load subscription plans.',
@@ -121,6 +124,16 @@ const Plans = () => {
         }
       );
       
+      // Log wide event with full business context
+      logger.info('subscription.plan_selected', {
+        plan_name: selectedPlan.name,
+        plan_price: planPrice,
+        is_recommended: selectedPlan.recommended || false,
+        time_to_decide_seconds: Math.round(timeOnPage),
+        ab_variant: ctaVariant || 'control',
+        plan_features_count: selectedPlan.features.length,
+      });
+
       // Navigate to signup with plan ID
       navigate(`/signup?plan=${planId}`);
     } else {
